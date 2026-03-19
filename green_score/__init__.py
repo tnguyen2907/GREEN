@@ -43,13 +43,10 @@ def compute_green(
     refs,
     hyps,
     model_name="StanfordAIMI/GREEN-RadLlama2-7b",
-    batch_size=8,
     num_gpus=None,
 ):
     if len(refs) != len(hyps):
         raise ValueError("refs and hyps must have the same length.")
-    if batch_size < 1:
-        raise ValueError("batch_size must be at least 1.")
     if len(refs) == 0:
         return [], pd.Series(dtype=object)
 
@@ -91,8 +88,6 @@ def compute_green(
                 output_path,
                 "--model_name",
                 model_name,
-                "--batch_size",
-                str(batch_size),
             ]
 
             env = os.environ.copy()

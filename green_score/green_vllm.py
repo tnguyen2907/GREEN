@@ -2,7 +2,6 @@ import argparse
 import re
 
 import pandas as pd
-from tqdm import tqdm
 from vllm import LLM, SamplingParams
 
 from green_score.utils import clean_responses, make_prompt
@@ -12,11 +11,8 @@ CHAT_TEMPLATE = "{% for message in messages %}\n{% if message['from'] == 'human'
 
 
 class GREENVLLM:
-    def __init__(self, model_name, batch_size=8):
-        if batch_size < 1:
-            raise ValueError("batch_size must be at least 1.")
+    def __init__(self, model_name):
         self.model_name = model_name
-        self.batch_size = batch_size
         self.max_length = 2048
         self.categories = [
             "Clinically Significant Errors",
@@ -59,15 +55,8 @@ class GREENVLLM:
 
     def generate(self, refs, hyps):
         prompts = self.build_prompts(refs, hyps)
-        responses = []
-
-        for start in tqdm(range(0, len(prompts), self.batch_size)):
-            batch_prompts = prompts[start : start + self.batch_size]
-            outputs = self.llm.generate(batch_prompts, self.sampling_params)
-            for output in outputs:
-                responses.append(clean_responses(output.outputs[0].text))
-
-        return responses
+        outputs = self.llm.generate(prompts, self.sampling_params)
+        return [clean_responses(output.outputs[0].text) for output in outputs]
 
     def compute_error_count(self, response):
         _, sig_errors = self.parse_error_counts(response, self.categories[0])
@@ -157,12 +146,6 @@ def parse_args():
         default="StanfordAIMI/GREEN-RadLlama2-7b",
         help="Hugging Face model name or local checkpoint path.",
     )
-    parser.add_argument(
-        "--batch_size",
-        type=int,
-        default=8,
-        help="Number of prompts per vLLM generate call.",
-    )
     return parser.parse_args()
 
 
@@ -174,7 +157,7 @@ def main():
             args.output_file, index=False
         )
         return
-    scorer = GREENVLLM(model_name=args.model_name, batch_size=args.batch_size)
+    scorer = GREENVLLM(model_name=args.model_name)
     result_df = scorer.score_dataframe(input_df)
     result_df.to_csv(args.output_file, index=False)
 
