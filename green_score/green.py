@@ -11,6 +11,7 @@ import numpy as np
 import time
 import sys
 import warnings
+import argparse
 
 # Import necessary functions (ensure these are available in your environment)
 from green_score.utils import (
@@ -47,7 +48,12 @@ def tqdm_on_main(*args, **kwargs):
 
 class GREEN:
     def __init__(
-        self, model_name=None, output_dir=".", cpu=False, compute_summary_stats=True
+        self,
+        model_name=None,
+        output_dir=".",
+        cpu=False,
+        compute_summary_stats=True,
+        batch_size=8,
     ):
         super().__init__()
         warnings.filterwarnings(
@@ -55,7 +61,7 @@ class GREEN:
         )
         self.cpu = cpu
         self.output_dir = output_dir
-        self.batch_size = 8
+        self.batch_size = batch_size
         self.max_length = 2048
         self.categories = [
             "Clinically Significant Errors",
@@ -80,7 +86,7 @@ class GREEN:
                 dist.init_process_group(
                     backend="nccl",
                 )
-                torch.cuda.set_device(dist.get_rank())
+                torch.cuda.set_device(int(os.environ["LOCAL_RANK"]))
                 if dist.get_rank() == 0:
                     print(
                         "Distributed training with", torch.cuda.device_count(), "GPUs"
@@ -431,4 +437,35 @@ class GREEN:
 
 
 if __name__ == "__main__":
-    pass
+    parser = argparse.ArgumentParser(description="Run GREEN scoring.")
+    parser.add_argument("--input_file", required=True, help="Path to input CSV.")
+    parser.add_argument("--output_file", required=True, help="Path to output CSV.")
+    parser.add_argument(
+        "--model_name",
+        default="StanfordAIMI/GREEN-RadLlama2-7b",
+        help="Hugging Face model name or local checkpoint path.",
+    )
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=8,
+        help="Inference batch size per process.",
+    )
+    args = parser.parse_args()
+
+    data = pd.read_csv(args.input_file)
+    scorer = GREEN(
+        model_name=args.model_name,
+        compute_summary_stats=False,
+        batch_size=args.batch_size,
+    )
+    _, _, green_scores, _, result_df = scorer(
+        refs=data["reference"].tolist(),
+        hyps=data["hypothesis"].tolist(),
+    )
+    pd.DataFrame(
+        {
+            "green_score": green_scores,
+            "green_analysis": result_df["green_analysis"],
+        }
+    ).to_csv(args.output_file, index=False)
