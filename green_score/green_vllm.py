@@ -32,6 +32,7 @@ class GREENVLLM:
             tensor_parallel_size=1,
             trust_remote_code=False if "Phi" in model_name else True,
             max_model_len=self.max_length,
+            enable_prefix_caching=True,
         )
         self.tokenizer = self.llm.get_tokenizer()
         self.tokenizer.chat_template = CHAT_TEMPLATE
